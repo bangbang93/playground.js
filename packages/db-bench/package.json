@@ -1,0 +1,37 @@
+{
+  "name": "@playground/db-bench",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LMDB vs RocksDB performance benchmark under memory-constrained conditions",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "bin": {
+    "db-bench": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean",
+    "bench": "node --enable-source-maps dist/cli.js"
+  },
+  "dependencies": {
+    "@harperfast/rocksdb-js": "^1.0.1",
+    "lmdb": "^3.5.3",
+    "yargs-parser": "^21.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/yargs-parser": "^21.0.3"
+  }
+}
