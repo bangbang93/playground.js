@@ -1,0 +1,32 @@
+services:
+  bench-256m:
+    build:
+      context: ../..
+      dockerfile: packages/db-bench/Dockerfile
+    mem_limit: 256m
+    command: ['--memory', '256']
+    volumes:
+      - bench-data-256m:/app/.bench-data
+
+  bench-512m:
+    build:
+      context: ../..
+      dockerfile: packages/db-bench/Dockerfile
+    mem_limit: 512m
+    command: ['--memory', '512']
+    volumes:
+      - bench-data-512m:/app/.bench-data
+
+  bench-1g:
+    build:
+      context: ../..
+      dockerfile: packages/db-bench/Dockerfile
+    mem_limit: 1g
+    command: ['--memory', '1024']
+    volumes:
+      - bench-data-1g:/app/.bench-data
+
+volumes:
+  bench-data-256m:
+  bench-data-512m:
+  bench-data-1g:
