@@ -13,6 +13,9 @@ npm run bench --workspace=@playground/db-bench
 
 # 运行内存压力测试
 node packages/db-bench/dist/cli.js --pressure-test --memory 128
+
+# 运行 key 顺序写入测试
+node packages/db-bench/dist/cli.js --key-order-test --memory 128 --data-ratio 2.0
 ```
 
 ## Docker 运行（真实内存限制）
@@ -28,6 +31,9 @@ docker run --rm --memory=128m db-bench --memory 128
 
 # 128MB 内存限制运行压力测试
 docker run --rm --memory=256m db-bench --pressure-test --memory 128
+
+# 128MB 内存限制运行 key 顺序测试
+docker run --rm --memory=256m db-bench --key-order-test --memory 128 --data-ratio 2.0
 
 # 使用 docker-compose（预设 256MB / 512MB / 1GB 档位）
 cd packages/db-bench
@@ -49,6 +55,8 @@ Options:
   --data-dir <path>     数据库文件目录 (default: ./.bench-data)
   --memory <n>          内存限制 MB (default: 256)
   --pressure-test       运行内存压力测试
+  --key-order-test      运行 key 顺序写入测试
+  --data-ratio <n>      key-order-test 的数据/内存比 (default: 4.0)
   --help, -h            帮助
 
 标准场景: sequential-write, random-read, random-write, range-scan, mixed-workload
@@ -79,6 +87,18 @@ Options:
 
 每个级别写入全量数据后，测量随机读、随机写、范围扫描性能，并输出实际磁盘占用。
 
+### Key 顺序写入测试 (`--key-order-test`)
+
+固定内存限制，以不同 key 写入顺序插入数据，对比 B+ 树 (LMDB) 与 LSM-Tree (RocksDB) 的写入性能差异。
+
+| 顺序       | 描述                                     |
+| ---------- | ---------------------------------------- |
+| sequential | 升序写入 key (0, 1, 2, ...)              |
+| reverse    | 降序写入 key (N-1, N-2, ...)             |
+| random     | 随机顺序写入 key（LCG 全周期伪随机置换） |
+
+写入阶段测量吞吐量（fire-and-forget put + 定期 flush），写入完成后随机读取 5000 条测量延迟分布。
+
 ## 项目结构
 
 ```
@@ -100,6 +120,7 @@ src/
 │   ├── range-scan.ts
 │   ├── mixed-workload.ts
 │   ├── memory-pressure.ts    # 压力测试
+│   ├── key-order-write.ts    # key 顺序测试
 │   └── index.ts
 ├── reporters/
 │   ├── table-reporter.ts
@@ -204,6 +225,36 @@ LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**
 |                  | 随机写   | 3,626   | 137,927 | RocksDB **38x**  |
 |                  | 范围扫描 | 392,139 | 49,779  | LMDB **7.9x**    |
 
+### Key 顺序写入测试 (128MB 内存限制, Docker 256MB 物理内存)
+
+#### 1x 数据量 (数据 ≈ 内存)
+
+| 顺序 | LMDB 写入 (ops/s) | RocksDB 写入 (ops/s) | LMDB 磁盘  | RocksDB 磁盘 |
+| ---- | ----------------- | -------------------- | ---------- | ------------ |
+| 升序 | 23,205            | 226,003              | 163 MB     | 166 MB       |
+| 降序 | 20,221            | 225,525              | **329 MB** | 166 MB       |
+| 随机 | 15,030            | 217,038              | 236 MB     | 235 MB       |
+
+| 顺序 | LMDB 读取 (ops/s) | RocksDB 读取 (ops/s) |
+| ---- | ----------------- | -------------------- |
+| 升序 | 264,662           | 2,213                |
+| 降序 | 3,485             | 2,079                |
+| 随机 | 14,193            | 1,059                |
+
+#### 2x 数据量 (数据 = 2× 内存)
+
+| 顺序 | LMDB 写入 (ops/s) | RocksDB 写入 (ops/s) | LMDB 磁盘  | RocksDB 磁盘 |
+| ---- | ----------------- | -------------------- | ---------- | ------------ |
+| 升序 | 40,223            | 279,962              | 325 MB     | 309 MB       |
+| 降序 | 37,464            | 293,174              | **656 MB** | 309 MB       |
+| 随机 | 5,815             | 246,280              | 461 MB     | 380 MB       |
+
+| 顺序 | LMDB 读取 (ops/s) | RocksDB 读取 (ops/s) |
+| ---- | ----------------- | -------------------- |
+| 升序 | 5,421             | 2,384                |
+| 降序 | 1,713             | 2,185                |
+| 随机 | 2,063             | 533                  |
+
 ---
 
 ## 关键发现
@@ -233,6 +284,14 @@ LMDB 磁盘占用始终稳定在数据的 1.27x，RocksDB 最高达 2.4x。原�
 
 在内存受限场景下，RocksDB 更大的磁盘占用意味着更多 I/O，进一步拖慢性能。
 
+### 6. Key 写入顺序对 LMDB 影响巨大，RocksDB 几乎无感
+
+**LMDB 降序写入导致磁盘膨胀 2x：** 1x 数据量下，升序写入 LMDB 占 163 MB，降序写入暴涨到 329 MB（2x 膨胀）。2x 数据量下降序更达 656 MB（升序 325 MB）。原因：B+ 树降序插入触发最坏情况的页分裂——每插入一个 key 都落到当前页最左位置，导致页 50% 空间浪费。RocksDB 降序写入磁盘与升序完全一致（166 MB / 309 MB），LSM-Tree 的 memtable 排序后刷盘，写入顺序无影响。
+
+**LMDB 随机写入性能随无序度剧降：** 1x 数据量下，升序 23K ops/s → 降序 20K → 随机 15K；2x 数据量下升序 40K → 随机暴跌至 5.8K（7x 差距）。RocksDB 三种顺序均在 217-293K ops/s 范围内，差异不到 20%。B+ 树的随机写入引发大量非连续页分裂和 page fault，LSM-Tree 无论写入顺序都只追加 memtable。
+
+**LMDB 降序写入后读取性能也受损：** 1x 数据量下，升序写入后随机读 264K ops/s，降序仅 3.5K（75x 差距）。降序写入导致的页分裂使 B+ 树空间局部性极差，mmap 页缓存命中率暴跌。
+
 ## 选型建议
 
 | 场景                      | 推荐        | 原因                      |
@@ -241,5 +300,6 @@ LMDB 磁盘占用始终稳定在数据的 1.27x，RocksDB 最高达 2.4x。原�
 | 内存充足 + 混合负载       | **LMDB**    | 全场景综合更优            |
 | 写多读少 + 内存紧张       | **RocksDB** | LSM-Tree 写入对内存更友好 |
 | 数据远大于内存 + 读写混合 | **RocksDB** | 写入性能退化更平缓        |
+| Key 顺序不可控 + 内存受限 | **RocksDB** | B+ 树对写入顺序极敏感     |
 | 嵌入式/边缘设备（小内存） | **看场景**  | 只读 LMDB，写密集 RocksDB |
 | 需要悲观事务              | **RocksDB** | LMDB 仅支持乐观锁         |
