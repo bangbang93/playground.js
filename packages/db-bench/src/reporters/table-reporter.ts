@@ -1,5 +1,6 @@
 import type { BenchmarkResult } from '../config.js';
 import type { PressureTestResult } from '../scenarios/memory-pressure.js';
+import type { KeyOrderWriteResult } from '../scenarios/key-order-write.js';
 import { formatNumber, formatMicroseconds } from '../stats.js';
 
 export function printTableReport(result: BenchmarkResult): void {
@@ -102,6 +103,81 @@ export function printPressureReport(results: PressureTestResult[]): void {
             padRight(formatMicroseconds(op.p99), 12),
         );
       }
+    }
+  }
+
+  console.log('\n' + '='.repeat(90) + '\n');
+}
+
+export function printKeyOrderReport(
+  results: KeyOrderWriteResult[],
+  dataRatio: number,
+): void {
+  const modes = ['sequential', 'reverse', 'random'] as const;
+  const databases = [...new Set(results.map((r) => r.database))];
+
+  console.log('\n' + '='.repeat(90));
+  console.log('Key Order Write Test Results');
+  console.log('='.repeat(90));
+  console.log(`Data/Memory ratio: ${dataRatio}x`);
+  console.log(`Memory limit: ${results[0]?.memoryMB ?? '?'} MB`);
+
+  for (const mode of modes) {
+    const modeResults = results.filter((r) => r.order === mode);
+    if (modeResults.length === 0) continue;
+
+    const entries = modeResults[0].entries.toLocaleString();
+    const dataMB = modeResults[0].dataMB;
+
+    console.log(
+      `\n${mode.toUpperCase()} ORDER — ${entries} entries, ~${dataMB} MB data`,
+    );
+    console.log('-'.repeat(86));
+
+    console.log('  WRITE:');
+    console.log(
+      padRight('    Database', 14) +
+        padRight('Ops/sec', 14) +
+        padRight('Avg (μs)', 12) +
+        padRight('p50 (μs)', 12) +
+        padRight('p90 (μs)', 12) +
+        padRight('p99 (μs)', 12) +
+        padRight('Disk (MB)', 12),
+    );
+
+    for (const r of modeResults) {
+      const w = r.writeResult;
+      console.log(
+        padRight(`    ${r.database}`, 14) +
+          padRight(formatNumber(w.opsPerSec), 14) +
+          padRight(formatMicroseconds(w.avgLatency), 12) +
+          padRight(formatMicroseconds(w.p50), 12) +
+          padRight(formatMicroseconds(w.p90), 12) +
+          padRight(formatMicroseconds(w.p99), 12) +
+          padRight(String(r.diskMB), 12),
+      );
+    }
+
+    console.log('  READ:');
+    console.log(
+      padRight('    Database', 14) +
+        padRight('Ops/sec', 14) +
+        padRight('Avg (μs)', 12) +
+        padRight('p50 (μs)', 12) +
+        padRight('p90 (μs)', 12) +
+        padRight('p99 (μs)', 12),
+    );
+
+    for (const r of modeResults) {
+      const rd = r.readResult;
+      console.log(
+        padRight(`    ${r.database}`, 14) +
+          padRight(formatNumber(rd.opsPerSec), 14) +
+          padRight(formatMicroseconds(rd.avgLatency), 12) +
+          padRight(formatMicroseconds(rd.p50), 12) +
+          padRight(formatMicroseconds(rd.p90), 12) +
+          padRight(formatMicroseconds(rd.p99), 12),
+      );
     }
   }
 

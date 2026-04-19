@@ -12,6 +12,10 @@ import {
   runMemoryPressure,
   type PressureTestResult,
 } from './scenarios/memory-pressure.js';
+import {
+  runKeyOrderWrite,
+  type KeyOrderWriteResult,
+} from './scenarios/key-order-write.js';
 import { cleanupDir, ensureDir } from './utils/index.js';
 import path from 'node:path';
 
@@ -70,6 +74,33 @@ export async function runPressureTest(
       await ensureDir(config.dataDir);
       await driver.open(dbPath, config.memoryLimitMB);
       const results = await runMemoryPressure(driver, config, dbPath);
+      allResults.push(...results);
+    } finally {
+      await driver.close();
+      await cleanupDir(dbPath);
+    }
+  }
+
+  return allResults;
+}
+
+export async function runKeyOrderTest(
+  config: BenchmarkConfig,
+  dataRatio: number,
+): Promise<KeyOrderWriteResult[]> {
+  const drivers: DatabaseDriver[] = [new LmdbDriver(), new RocksdbDriver()];
+  const allResults: KeyOrderWriteResult[] = [];
+
+  for (const driver of drivers) {
+    const dbPath = path.join(config.dataDir, driver.name.toLowerCase());
+    console.log(
+      `\n${driver.name} - Key Order Test (${config.memoryLimitMB} MB limit, ${dataRatio}x data)`,
+    );
+
+    try {
+      await ensureDir(config.dataDir);
+      await driver.open(dbPath, config.memoryLimitMB);
+      const results = await runKeyOrderWrite(driver, config, dbPath, dataRatio);
       allResults.push(...results);
     } finally {
       await driver.close();

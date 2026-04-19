@@ -1,8 +1,16 @@
 #!/usr/bin/env node
 import parser from 'yargs-parser';
 import { DEFAULT_CONFIG, type BenchmarkConfig } from './config.js';
-import { runBenchmarks, runPressureTest } from './benchmark.js';
-import { printTableReport, printPressureReport } from './reporters/index.js';
+import {
+  runBenchmarks,
+  runPressureTest,
+  runKeyOrderTest,
+} from './benchmark.js';
+import {
+  printTableReport,
+  printPressureReport,
+  printKeyOrderReport,
+} from './reporters/index.js';
 
 const args = parser(process.argv.slice(2));
 
@@ -24,6 +32,8 @@ Options:
   --data-dir <path>     Directory for database files (default: ${DEFAULT_CONFIG.dataDir})
   --memory <n>          Memory limit in MB (default: ${DEFAULT_CONFIG.memoryLimitMB})
   --pressure-test       Run memory pressure test with increasing data sizes
+  --key-order-test      Run key order write test (sequential/reverse/random)
+  --data-ratio <n>      Data/memory ratio for key-order-test (default: 4.0)
   --help, -h            Show this help message
 
 Available scenarios:
@@ -50,6 +60,12 @@ if (args['pressure-test']) {
   console.log(JSON.stringify(config, null, 2));
   const results = await runPressureTest(config);
   printPressureReport(results);
+} else if (args['key-order-test']) {
+  const dataRatio = args['data-ratio'] ? parseFloat(args['data-ratio']) : 4.0;
+  console.log('Starting key order test with config:');
+  console.log(JSON.stringify({ ...config, dataRatio }, null, 2));
+  const results = await runKeyOrderTest(config, dataRatio);
+  printKeyOrderReport(results, dataRatio);
 } else {
   console.log('Starting benchmark with config:');
   console.log(JSON.stringify(config, null, 2));

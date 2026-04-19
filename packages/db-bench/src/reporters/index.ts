@@ -1,1 +1,5 @@
-export { printTableReport, printPressureReport } from './table-reporter.js';
+export {
+  printTableReport,
+  printPressureReport,
+  printKeyOrderReport,
+} from './table-reporter.js';
