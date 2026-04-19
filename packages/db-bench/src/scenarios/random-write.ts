@@ -1,5 +1,6 @@
 import type { DatabaseDriver } from '../databases/interface.js';
 import type { BenchmarkConfig, ScenarioResult } from '../config.js';
+import { calculateStats } from '../stats.js';
 import {
   generateKey,
   generateValue,
@@ -30,31 +31,30 @@ export async function runRandomWrite(
   }
 
   for (let i = 0; i < config.warmupIterations; i++) {
-    db.put(generateKey(i, config.keySize), value);
+    const key = generateKey(randomIndices[i], config.keySize);
+    await db.put(key, value);
   }
-  await db.flush();
 
+  const latencies: bigint[] = [];
   const start = process.hrtime.bigint();
   for (let i = 0; i < config.iterations; i++) {
-    db.put(generateKey(randomIndices[i], config.keySize), value);
+    const key = generateKey(randomIndices[i], config.keySize);
+    const opStart = process.hrtime.bigint();
+    await db.put(key, value);
+    latencies.push(process.hrtime.bigint() - opStart);
   }
-  await db.flush();
-  const totalTimeNs = process.hrtime.bigint() - start;
+  const totalTime = process.hrtime.bigint() - start;
 
-  const totalUs = Number(totalTimeNs / 1_000n);
-  const opsPerSec =
-    totalUs > 0 ? Math.round((config.iterations / totalUs) * 1_000_000) : 0;
-  const avgLatency = totalUs / config.iterations;
-
+  const stats = calculateStats(latencies);
   return {
     database: db.name,
     scenario: RANDOM_WRITE_NAME,
-    opsPerSec,
-    p50: avgLatency,
-    p90: avgLatency,
-    p99: avgLatency,
-    avgLatency,
-    totalTimeMs: Number(totalTimeNs / 1_000_000n),
+    opsPerSec: stats.opsPerSec,
+    p50: stats.p50,
+    p90: stats.p90,
+    p99: stats.p99,
+    avgLatency: stats.avgLatency,
+    totalTimeMs: Number(totalTime / 1_000_000n),
     iterations: config.iterations,
   };
 }
