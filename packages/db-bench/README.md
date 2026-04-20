@@ -181,11 +181,10 @@ RocksDatabase.open(path, { noBlockCache: false, parallelismThreads: 1 });
 
 ```mermaid
 xychart-beta
-    title "标准基准测试 — LMDB vs RocksDB (256MB)"
+    title "标准基准测试 — LMDB 优势倍数 (256MB)"
     x-axis ["顺序写入", "随机读取", "随机写入", "范围扫描", "混合读写"]
-    y-axis "K ops/sec" 0 --> 700
-    bar [273, 549, 403, 655, 384]
-    bar [274, 432, 206, 289, 324]
+    y-axis "LMDB/RocksDB 倍数" 0 --> 2.5
+    line [1.0, 1.27, 1.96, 2.27, 1.18]
 ```
 
 ### 不同内存限制对比 (Docker)
@@ -204,29 +203,29 @@ xychart-beta
 
 ```mermaid
 xychart-beta
-    title "随机读取 — 内存限制对性能的影响"
+    title "随机读取 — 内存限制 vs 吞吐量"
     x-axis ["128M", "256M", "1G"]
     y-axis "K ops/sec" 0 --> 600
-    bar [549, 549, 561]
-    bar [206, 432, 436]
+    line [549, 549, 561]
+    line [206, 432, 436]
 ```
 
 ```mermaid
 xychart-beta
-    title "随机写入 — 内存限制对性能的影响"
+    title "随机写入 — 内存限制 vs 吞吐量"
     x-axis ["128M", "256M", "1G"]
     y-axis "K ops/sec" 0 --> 450
-    bar [365, 403, 412]
-    bar [112, 206, 221]
+    line [365, 403, 412]
+    line [112, 206, 221]
 ```
 
 ```mermaid
 xychart-beta
-    title "范围扫描 — 内存限制对性能的影响"
+    title "范围扫描 — 内存限制 vs 吞吐量"
     x-axis ["128M", "256M", "1G"]
     y-axis "K ops/sec" 0 --> 700
-    bar [649, 655, 618]
-    bar [263, 289, 298]
+    line [649, 655, 618]
+    line [263, 289, 298]
 ```
 
 内存越少，LMDB 优势越大。
@@ -244,11 +243,11 @@ xychart-beta
 
 ```mermaid
 xychart-beta
-    title "磁盘实际占用 — 数据膨胀对比"
+    title "磁盘实际占用 — 数据膨胀倍数"
     x-axis ["sufficient", "close", "insufficient", "severe"]
-    y-axis "MB" 0 --> 800
-    bar [65, 147, 325, 650]
-    bar [89, 274, 494, 767]
+    y-axis "磁盘/数据 倍数" 0 --> 2.5
+    line [1.27, 1.28, 1.27, 1.27]
+    line [1.74, 2.38, 1.93, 1.50]
 ```
 
 LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**（SST + WAL + compaction 临时空间）。
@@ -272,29 +271,42 @@ LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**
 
 ```mermaid
 xychart-beta
-    title "内存压力 — 随机读取"
+    title "内存压力 — LMDB 优势倍数（对数刻度概念）"
+    x-axis ["随机读", "随机写", "范围扫描"]
+    y-axis "LMDB/RocksDB 倍数" 0 --> 30
+    line [28, 0.4, 2.5]
+    line [125, 0.7, 3.2]
+    line [2.5, 0.04, 3.2]
+    line [1.2, 0.03, 7.9]
+```
+
+> sufficient=蓝线, close=橙线, insufficient=绿线, severe=红线 ● <1 表示 RocksDB 优胜，>1 表示 LMDB 优胜
+
+```mermaid
+xychart-beta
+    title "内存压力 — 随机读取 K ops/sec"
     x-axis ["sufficient", "close", "insufficient", "severe"]
     y-axis "K ops/sec" 0 --> 450
-    bar [313, 425, 8, 4]
-    bar [11, 3, 3, 3]
+    line [313, 425, 8, 4]
+    line [11, 3, 3, 3]
 ```
 
 ```mermaid
 xychart-beta
-    title "内存压力 — 随机写入"
+    title "内存压力 — 随机写入 K ops/sec"
     x-axis ["sufficient", "close", "insufficient", "severe"]
     y-axis "K ops/sec" 0 --> 250
-    bar [95, 89, 7, 4]
-    bar [248, 131, 164, 138]
+    line [95, 89, 7, 4]
+    line [248, 131, 164, 138]
 ```
 
 ```mermaid
 xychart-beta
-    title "内存压力 — 范围扫描"
+    title "内存压力 — 范围扫描 K ops/sec"
     x-axis ["sufficient", "close", "insufficient", "severe"]
     y-axis "K ops/sec" 0 --> 950
-    bar [911, 917, 486, 392]
-    bar [368, 283, 153, 50]
+    line [911, 917, 486, 392]
+    line [368, 283, 153, 50]
 ```
 
 ### Key 顺序写入测试 (128MB 内存限制, Docker 256MB 物理内存)
@@ -315,29 +327,27 @@ xychart-beta
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入 — 1x 数据量 (128MB)"
+    title "Key 顺序写入 — LMDB/RocksDB 写入速度比 (1x)"
     x-axis ["升序", "降序", "随机"]
-    y-axis "K ops/sec" 0 --> 250
-    bar [23, 20, 15]
-    bar [226, 226, 217]
+    y-axis "LMDB/RocksDB 倍数" 0 --> 0.3
+    line [0.10, 0.09, 0.07]
 ```
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入后读取 — 1x 数据量 (128MB)"
+    title "Key 顺序写入后读取 — LMDB (1x, K ops/sec)"
     x-axis ["升序", "降序", "随机"]
     y-axis "K ops/sec" 0 --> 280
-    bar [265, 3, 14]
-    bar [2, 2, 1]
+    line [265, 3, 14]
 ```
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入磁盘占用 — 1x 数据量 (128MB)"
+    title "Key 顺序写入磁盘膨胀倍数 (1x)"
     x-axis ["升序", "降序", "随机"]
-    y-axis "MB" 0 --> 350
-    bar [163, 329, 236]
-    bar [166, 166, 235]
+    y-axis "磁盘/数据 倍数" 0 --> 2.6
+    line [1.27, 2.57, 1.84]
+    line [1.30, 1.30, 1.84]
 ```
 
 #### 2x 数据量 (数据 = 2× 内存)
@@ -356,29 +366,28 @@ xychart-beta
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入 — 2x 数据量 (128MB)"
+    title "Key 顺序写入 — LMDB/RocksDB 写入速度比 (2x)"
     x-axis ["升序", "降序", "随机"]
-    y-axis "K ops/sec" 0 --> 300
-    bar [40, 37, 6]
-    bar [280, 293, 246]
+    y-axis "LMDB/RocksDB 倍数" 0 --> 0.2
+    line [0.14, 0.13, 0.02]
 ```
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入后读取 — 2x 数据量 (128MB)"
+    title "Key 顺序写入后读取 — LMDB (2x, K ops/sec)"
     x-axis ["升序", "降序", "随机"]
     y-axis "K ops/sec" 0 --> 6
-    bar [5.4, 1.7, 2.1]
-    bar [2.4, 2.2, 0.5]
+    line [5.4, 1.7, 2.1]
+    line [2.4, 2.2, 0.5]
 ```
 
 ```mermaid
 xychart-beta
-    title "Key 顺序写入磁盘占用 — 2x 数据量 (128MB)"
+    title "Key 顺序写入磁盘膨胀倍数 (2x)"
     x-axis ["升序", "降序", "随机"]
-    y-axis "MB" 0 --> 700
-    bar [325, 656, 461]
-    bar [309, 309, 380]
+    y-axis "磁盘/数据 倍数" 0 --> 2.6
+    line [1.27, 2.56, 1.80]
+    line [1.21, 1.21, 1.48]
 ```
 
 ---
