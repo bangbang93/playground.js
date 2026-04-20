@@ -70,7 +70,7 @@ Options:
 | ---------------- | -------------------- | ------------------------------- |
 | sequential-write | 顺序写入（批量加载） | 吞吐量：全量 put + flush 总时间 |
 | random-read      | 随机读取             | 逐条 get 延迟分布               |
-| random-write     | 随机更新             | 吞吐量：全量 put + flush 总时间 |
+| random-write     | 随机更新             | 逐条 put 延迟分布               |
 | range-scan       | 范围扫描             | 全量迭代吞吐量                  |
 | mixed-workload   | 混合读写 (80/20)     | 逐条操作延迟分布                |
 
@@ -179,6 +179,15 @@ RocksDatabase.open(path, { noBlockCache: false, parallelismThreads: 1 });
 | 范围扫描 | 654,695        | 288,699           | 2.27x     |
 | 混合读写 | 383,686        | 324,433           | 1.18x     |
 
+```mermaid
+xychart-beta
+    title "标准基准测试 — LMDB vs RocksDB (256MB)"
+    x-axis ["顺序写入", "随机读取", "随机写入", "范围扫描", "混合读写"]
+    y-axis "K ops/sec" 0 --> 700
+    bar [273, 549, 403, 655, 384]
+    bar [274, 432, 206, 289, 324]
+```
+
 ### 不同内存限制对比 (Docker)
 
 | 场景     | 内存 | LMDB (ops/sec) | RocksDB (ops/sec) | LMDB 优势 |
@@ -193,6 +202,33 @@ RocksDatabase.open(path, { noBlockCache: false, parallelismThreads: 1 });
 | 范围扫描 | 256M | 654,695        | 288,699           | 2.27x     |
 | 范围扫描 | 1G   | 617,865        | 298,253           | 2.07x     |
 
+```mermaid
+xychart-beta
+    title "随机读取 — 内存限制对性能的影响"
+    x-axis ["128M", "256M", "1G"]
+    y-axis "K ops/sec" 0 --> 600
+    bar [549, 549, 561]
+    bar [206, 432, 436]
+```
+
+```mermaid
+xychart-beta
+    title "随机写入 — 内存限制对性能的影响"
+    x-axis ["128M", "256M", "1G"]
+    y-axis "K ops/sec" 0 --> 450
+    bar [365, 403, 412]
+    bar [112, 206, 221]
+```
+
+```mermaid
+xychart-beta
+    title "范围扫描 — 内存限制对性能的影响"
+    x-axis ["128M", "256M", "1G"]
+    y-axis "K ops/sec" 0 --> 700
+    bar [649, 655, 618]
+    bar [263, 289, 298]
+```
+
 内存越少，LMDB 优势越大。
 
 ### 内存压力测试 (128MB 内存限制, Docker 256MB 物理内存)
@@ -205,6 +241,15 @@ RocksDatabase.open(path, { noBlockCache: false, parallelismThreads: 1 });
 | close (0.9x)        | 115 MB   | 147 MB (1.28x) | 274 MB (2.38x)   |
 | insufficient (2.0x) | 256 MB   | 325 MB (1.27x) | 494 MB (1.93x)   |
 | severe (4.0x)       | 512 MB   | 650 MB (1.27x) | 767 MB (1.50x)   |
+
+```mermaid
+xychart-beta
+    title "磁盘实际占用 — 数据膨胀对比"
+    x-axis ["sufficient", "close", "insufficient", "severe"]
+    y-axis "MB" 0 --> 800
+    bar [65, 147, 325, 650]
+    bar [89, 274, 494, 767]
+```
 
 LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**（SST + WAL + compaction 临时空间）。
 
@@ -225,6 +270,33 @@ LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**
 |                  | 随机写   | 3,626   | 137,927 | RocksDB **38x**  |
 |                  | 范围扫描 | 392,139 | 49,779  | LMDB **7.9x**    |
 
+```mermaid
+xychart-beta
+    title "内存压力 — 随机读取"
+    x-axis ["sufficient", "close", "insufficient", "severe"]
+    y-axis "K ops/sec" 0 --> 450
+    bar [313, 425, 8, 4]
+    bar [11, 3, 3, 3]
+```
+
+```mermaid
+xychart-beta
+    title "内存压力 — 随机写入"
+    x-axis ["sufficient", "close", "insufficient", "severe"]
+    y-axis "K ops/sec" 0 --> 250
+    bar [95, 89, 7, 4]
+    bar [248, 131, 164, 138]
+```
+
+```mermaid
+xychart-beta
+    title "内存压力 — 范围扫描"
+    x-axis ["sufficient", "close", "insufficient", "severe"]
+    y-axis "K ops/sec" 0 --> 950
+    bar [911, 917, 486, 392]
+    bar [368, 283, 153, 50]
+```
+
 ### Key 顺序写入测试 (128MB 内存限制, Docker 256MB 物理内存)
 
 #### 1x 数据量 (数据 ≈ 内存)
@@ -241,6 +313,33 @@ LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**
 | 降序 | 3,485             | 2,079                |
 | 随机 | 14,193            | 1,059                |
 
+```mermaid
+xychart-beta
+    title "Key 顺序写入 — 1x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "K ops/sec" 0 --> 250
+    bar [23, 20, 15]
+    bar [226, 226, 217]
+```
+
+```mermaid
+xychart-beta
+    title "Key 顺序写入后读取 — 1x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "K ops/sec" 0 --> 280
+    bar [265, 3, 14]
+    bar [2, 2, 1]
+```
+
+```mermaid
+xychart-beta
+    title "Key 顺序写入磁盘占用 — 1x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "MB" 0 --> 350
+    bar [163, 329, 236]
+    bar [166, 166, 235]
+```
+
 #### 2x 数据量 (数据 = 2× 内存)
 
 | 顺序 | LMDB 写入 (ops/s) | RocksDB 写入 (ops/s) | LMDB 磁盘  | RocksDB 磁盘 |
@@ -254,6 +353,33 @@ LMDB 磁盘膨胀稳定在 **1.27x**（B+ 树页对齐），RocksDB **1.5-2.4x**
 | 升序 | 5,421             | 2,384                |
 | 降序 | 1,713             | 2,185                |
 | 随机 | 2,063             | 533                  |
+
+```mermaid
+xychart-beta
+    title "Key 顺序写入 — 2x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "K ops/sec" 0 --> 300
+    bar [40, 37, 6]
+    bar [280, 293, 246]
+```
+
+```mermaid
+xychart-beta
+    title "Key 顺序写入后读取 — 2x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "K ops/sec" 0 --> 6
+    bar [5.4, 1.7, 2.1]
+    bar [2.4, 2.2, 0.5]
+```
+
+```mermaid
+xychart-beta
+    title "Key 顺序写入磁盘占用 — 2x 数据量 (128MB)"
+    x-axis ["升序", "降序", "随机"]
+    y-axis "MB" 0 --> 700
+    bar [325, 656, 461]
+    bar [309, 309, 380]
+```
 
 ---
 
@@ -303,3 +429,31 @@ LMDB 磁盘占用始终稳定在数据的 1.27x，RocksDB 最高达 2.4x。原�
 | Key 顺序不可控 + 内存受限 | **RocksDB** | B+ 树对写入顺序极敏感     |
 | 嵌入式/边缘设备（小内存） | **看场景**  | 只读 LMDB，写密集 RocksDB |
 | 需要悲观事务              | **RocksDB** | LMDB 仅支持乐观锁         |
+
+```mermaid
+graph TD
+    START[选择嵌入式 KV 存储] --> Q1{读写比?}
+    Q1 -->|读多写少| Q2{内存是否充足?}
+    Q1 -->|写多读少| Q3{Key 顺序可控?}
+    Q1 -->|读写混合| Q4{数据是否远大于内存?}
+
+    Q2 -->|是| LMDB1[✅ LMDB<br/>mmap 零拷贝读取无敌]
+    Q2 -->|否| LMDB2[⚠️ LMDB 仅限只读<br/>读取仍快但写入退化]
+
+    Q3 -->|是| LMDB3[✅ LMDB<br/>顺序写入性能尚可]
+    Q3 -->|否| ROCKS1[✅ RocksDB<br/>LSM-Tree 写入顺序无感]
+
+    Q4 -->|是| ROCKS2[✅ RocksDB<br/>写入退化更平缓]
+    Q4 -->|否| Q5{Key 顺序可控?}
+
+    Q5 -->|是| LMDB4[✅ LMDB<br/>综合更优]
+    Q5 -->|否| ROCKS3[✅ RocksDB<br/>B+ 树对顺序极敏感]
+
+    style LMDB1 fill:#4CAF50,color:white
+    style LMDB2 fill:#FF9800,color:white
+    style LMDB3 fill:#4CAF50,color:white
+    style LMDB4 fill:#4CAF50,color:white
+    style ROCKS1 fill:#2196F3,color:white
+    style ROCKS2 fill:#2196F3,color:white
+    style ROCKS3 fill:#2196F3,color:white
+```
